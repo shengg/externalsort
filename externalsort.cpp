@@ -6,7 +6,7 @@
 #include <vector> 
 #include <fstream>
 #include <iostream>
-#define Buff_SIZE 100000
+#define Buff_SIZE 10000
 
 
 #define SERIAL
@@ -73,9 +73,40 @@ class cache
 {
   public:
   typedef T valuetype;
+
+  explicit cache(const cache& cache0): 
+    finishedread    ( cache0.finishedread), 
+    current_pointer ( cache0.current_pointer),
+    begin_pointer   ( cache0.begin_pointer),
+    end_pointer     ( cache0.end_pointer),
+    cache_size      ( cache0.cache_size),
+    inputfile       ( cache0.inputfile)
+  {
+  }
+  cache& operator=(const cache& cache0){
+    finishedread    = cache0.finishedread;
+    current_pointer = cache0.current_pointer;
+    begin_pointer   = cache0.begin_pointer;
+    end_pointer     = cache0.end_pointer;
+    cache_size      = cache0.cache_size;
+    inputfile       = cache0.inputfile;
+
+  }
+  //cache(cache&& cache0):
+  //  finishedread    ( cache0.finishedread), 
+  //  current_pointer ( cache0.current_pointer),
+  //  begin_pointer   ( cache0.begin_pointer),
+  //  end_pointer     ( cache0.end_pointer),
+  //  cache_size      ( cache0.cache_size),
+  //  inputfile       ( cache0.inputfile)
+  //{
+  //  cout << "move constructor\n";
+  //}
+
+  //}
   //cache(char* filename ){}
-//  cache(char* filename, size_t buff_size) {
-//    begin_pionter=malloc(sizeof(valuetype*buff_size));
+//  cache(char* filename, size_t cache_size) {
+//    begin_pionter=malloc(sizeof(valuetype*cache_size));
 //
 //    inputfile=fopen(finename,"rb"); 
 //    if(inputfile==NULL){
@@ -83,14 +114,14 @@ class cache
 //      cout << "cannot open \n";
 //      return;
 //    }
-//    size_t real_size=fread(begin_pointer,sizeof(valuetype),buff_size,inputfile);
+//    size_t real_size=fread(begin_pointer,sizeof(valuetype),cache_size,inputfile);
 //    if(real_size ==0) {fclose(inputfile); current_pointer=NULL;}
-//    else if ( real_size< buff_size){
-//      buff_size = real_size;
+//    else if ( real_size< cache_size){
+//      cache_size = real_size;
 //      fclose(inputfile);
 //      finishedread=true;
 //    }
-//    end_pointer = begin_pointer+buff_size;
+//    end_pointer = begin_pointer+cache_size;
 //    current_pointer = begin_pointer;
 //    return current_pointer++;
 //
@@ -98,8 +129,9 @@ class cache
     
   //seek_set of file makes it possible to seperate one file into different parts.
   //Now, it is not implented because, there is no option to detect the end of pieces of one file.
-  cache(char* filename, size_t buff_size, size_t seek_set_of_file =0) {
-    begin_pointer=(valuetype*) malloc(sizeof(valuetype)*buff_size);
+  cache(char* filename, size_t buffer_size, size_t seek_set_of_file =0) {
+    cache_size=buffer_size;
+    begin_pointer=(valuetype*) malloc(sizeof(valuetype)*cache_size);
     if(begin_pointer==NULL){
       cout << "cannot allocate memory for cache, abort\n";
       abort();
@@ -111,37 +143,76 @@ class cache
       cout << "cannot open :"<<filename<<endl;
       return;
     }
-    fseek(inputfile,sizeof(valuetype)*seek_set_of_file,SEEK_SET);
-    size_t real_size=fread(begin_pointer,sizeof(valuetype),buff_size,inputfile);
-    if(real_size ==0) {fclose(inputfile); current_pointer=NULL;}
-    else if ( real_size< buff_size){
-      buff_size = real_size;
+    //fseek(inputfile,sizeof(valuetype)*seek_set_of_file,SEEK_SET);
+    size_t real_size=fread(begin_pointer,sizeof(valuetype),cache_size,inputfile);
+    if(real_size ==0) {
+      fclose(inputfile); 
+      current_pointer=NULL;
+      return;
+    }
+    else if ( real_size< cache_size){
       fclose(inputfile);
       finishedread=true;
     }
-    end_pointer = begin_pointer+buff_size;
+    end_pointer = begin_pointer+real_size;
     current_pointer = begin_pointer;
 
   }
   ~cache(){
-    free(begin_pointer);
+    //FIXME
+    //std::vector:push_back creat and delete objects serveral times. Why?
+    //cout << "deleted"<<endl;
+    //FIXME, if it is clear here, there are problems in the copy of cache.
+    //free(begin_pointer);
+    //fclose(inputfile);
   }
-  valuetype* pop(){
-    if(current_pointer!=end_pointer){
-      return current_pointer++;
+  void clear(){
+    free(begin_pointer);
+    fclose(inputfile);
+  }
+//  valuetype* pop(){
+//    valuetype* tmppointer = current_pointer;
+//    if(current_pointer!=end_pointer-1){
+//      current_pointer++;
+//    }
+//    else{
+//      if(finishedread) current_pointer=NULL;
+//      size_t real_size=fread(begin_pointer,sizeof(valuetype),cache_size,inputfile);
+//      if(real_size ==0) {
+//        fclose(inputfile); 
+//        current_pointer=NULL;
+//      }
+//      else if ( real_size< cache_size){
+//        fclose(inputfile);
+//        finishedread=true;
+//      }
+//      end_pointer = begin_pointer+real_size;
+//      current_pointer = begin_pointer;
+//
+//    }
+//    return tmppointer;
+//  }
+//
+  bool forward(){
+    if(current_pointer!=end_pointer-1){
+      current_pointer++;
+      return true;
     }
     else{
-      if(finishedread) return NULL;
-      size_t real_size=fread(begin_pointer,sizeof(valuetype),buff_size,inputfile);
-      if(real_size ==0) {fclose(inputfile); return NULL;}
-      else if ( real_size< buff_size){
-        buff_size = real_size;
+      if(finishedread) return false;
+      size_t real_size=fread(begin_pointer,sizeof(valuetype),cache_size,inputfile);
+      if(real_size ==0) 
+      {
+        fclose(inputfile); 
+        return false;
+      }
+      if ( real_size< cache_size){
         fclose(inputfile);
         finishedread=true;
       }
-      end_pointer = begin_pointer+buff_size;
+      end_pointer = begin_pointer+real_size;
       current_pointer = begin_pointer;
-      return current_pointer++;
+      return true;
 
     }
   }
@@ -152,13 +223,14 @@ class cache
     return *current_pointer;
   }
 
-  private:
+    //size_t cache_size;
+    int cache_size;
     bool finishedread;
     valuetype* current_pointer;
     valuetype* begin_pointer;
     valuetype* end_pointer;
-    size_t buff_size;
     FILE* inputfile;
+  private:
 
   
 
@@ -211,7 +283,7 @@ void externalsort(char* inputfilename, char* outputfilename){
     fwrite(onepiece,sizeof(T),read_size,outputfile);
     piecesnumber++;
     fclose(outputfile);
-    cout << "piecenumber: "<<piecesnumber<<endl;
+    //cout << "piecenumber: "<<piecesnumber<<endl;
 
   };
   fclose(datafile);
@@ -230,41 +302,51 @@ void externalsort(char* inputfilename, char* outputfilename){
   //}
   std::vector<cache<T>> filecache;
   char tmpfile[100];
-  for(int i =0; i<= piecesnumber; i++){
+  for(int i =0; i< piecesnumber; i++){
 #ifndef SERIAL
     sprintf (tmpfile, "%s%d%s%d","tmpsortingfile", i,".",mpigetrank());
 #else
     sprintf (tmpfile, "%s%d","tmpsortingfile", i);
 #endif
 
-    cache<T> tmpcache( tmpfile, Buff_SIZE/piecesnumber);
+    //cache<T> tmpcache( tmpfile, Buff_SIZE/piecesnumber);
+    cache<T> tmpcache( tmpfile, Buff_SIZE/20);
+    //cache<T> tmpcache( tmpfile, Buff_SIZE);
     if(tmpcache.current_position()!= NULL)
       filecache.push_back(tmpcache);
+      //filecache.emplace_back(tmpcache);
+
   }
+  //cout <<"cachesize"<< filecache.size()<<endl;
 
-  //outputfile = fopen(outputfilename,"wb");
-  outputfile = fopen(outputfilename,"w");
+  outputfile = fopen(outputfilename,"wb");
+  //outputfile = fopen(outputfilename,"w");
 
-  cout << "Okay?"<<endl;
   T outputbuff[Buff_SIZE];
   long outputbuff_position=0;
-  // select the smallest one in the current positions of different caches.
   for(;;){
+    // select the smallest one in the current positions of different caches.
     int smallest = 0;
-    for(int i=0 ; i< filecache.size(); i++){
+    for(int i=1 ; i< filecache.size(); i++){
       if(filecache[i].value() < filecache[smallest].value())
         smallest =i;
     }
     cout << filecache[smallest].value()<<endl;
-    outputbuff[outputbuff_position++]=*(filecache[smallest].pop());
+    outputbuff[outputbuff_position++]=filecache[smallest].value();
+
+    if(!filecache[smallest].forward()){
+      filecache.erase(filecache.begin()+smallest);
+      if (filecache.size()==0) {
+      fwrite(outputbuff,sizeof(T),outputbuff_position,outputfile);
+      break;
+      }
+    }
+
     if(outputbuff_position == Buff_SIZE){
       fwrite(outputbuff,sizeof(T),Buff_SIZE,outputfile);
       outputbuff_position=0;
     }
-    if(filecache[smallest].current_position() ==NULL){
-      filecache.erase(filecache.begin()+smallest);
-      if (filecache.size()==0) break;
-    }
+
   }
   fclose(outputfile);
 
